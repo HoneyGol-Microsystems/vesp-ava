@@ -4,6 +4,9 @@ module vesp_ava_top (
     input   logic       hdmi_clk_x5,
     input   logic       audio_clk,
 
+    output  logic       pcm_empty_irq,
+    output  logic       vblank_irq,
+
     // To HDMI port
     output  logic [2:0] tmds,
     output  logic       tmds_clock
@@ -16,10 +19,11 @@ module vesp_ava_top (
     // =================================
     // Controller signals
     coords_t coords;
-    logic    vblank_irq;
+    logic    vblank;
+    logic    pcm_empty;
 
     // FIFO connections
-    logic fifo_full;
+    logic pixel_fifo_full;
     logic fifo_wr;
     logic [23:0] rendered_pixel;
 
@@ -42,6 +46,12 @@ module vesp_ava_top (
     logic [VRAM_ADDR_WIDTH-1:0] vga_direct_vram_addr;
 
     // Palette RAM conections
+    logic [31:0]                pram_a1;
+    logic [31:0]                pram_do1;
+    logic [31:0]                pram_di1;
+    logic [3:0]                 pram_we1;
+    logic                       pram_en1;
+
     logic [PRAM_ADDR_WIDTH-1:0] pram_a2;
     logic [31:0]                pram_do2;
 
@@ -56,18 +66,32 @@ module vesp_ava_top (
         .clk(wb.clk_i),
         .reset(wb.rst_i),
 
-        .fifo_full(fifo_full),
-        .vga_mode(vga_mode),
+        .pixel_fifo_full(pixel_fifo_full),
         .coords(coords),
-        .vblank_irq(vblank_irq)
+        .vblank(vblank)
     );
 
     ava_wb wishbone_controller (
         .clk(wb.clk_i),
         .reset(wb.rst_i),
-        
+
         .vram_a(vram_a1),
         .vram_di(vram_di1),
+        .vram_en(vram_en1),
+        .vram_we(vram_we1),
+        .vram_do(vram_do1),
+
+        .pram_a(pram_a1),
+        .pram_di(pram_di1),
+        .pram_en(pram_en1),
+        .pram_we(pram_we1),
+        .pram_do(pram_do1),
+        
+        .vblank(vblank),
+        .pcm_empty(pcm_empty),
+        .vga_mode(vga_mode),
+        .vblank_irq(vblank_irq),
+        .pcm_empty_irq(pcm_empty_irq)
     );
 
     ava_sdpbram #(
@@ -77,15 +101,15 @@ module vesp_ava_top (
     ) vram (
         .clk(wb.clk_i),
         
-        .a1(),
-        .do1(),
-        .di1(),
-        .en1(),
-        .we1(),
+        .a1(vram_a1),
+        .do1(vram_do1),
+        .di1(vram_di1),
+        .en1(vram_en1),
+        .we1(vram_we1),
         
         .a2(vram_a2),
         .do2(vram_do2),
-        .en2(~fifo_full)
+        .en2(~pixel_fifo_full)
     );
 
     ava_sdpdram #(
@@ -95,11 +119,11 @@ module vesp_ava_top (
     ) pram (
         .clk(wb.clk_i),
         
-        .a1(),
-        .do1(),
-        .di1(),
-        .en1(),
-        .we1(),
+        .a1(pram_a1),
+        .do1(pram_do1),
+        .di1(pram_di1),
+        .en1(pram_en1),
+        .we1(pram_we1),
 
         .a2(pram_a2),
         .do2(pram_do2),
@@ -124,7 +148,7 @@ module vesp_ava_top (
     // =================================
     // HDMI clock domain.
     // =================================
-    logic fifo_empty;
+    logic pixel_fifo_empty;
     logic fifo_rd;
 
     logic [23:0] hdmi_pixel;
@@ -145,16 +169,16 @@ module vesp_ava_top (
     ) pixel_fifo(
         .wclk(wb.clk_i),
         .wrst_n(~wb.rst_i),
-        .winc(~fifo_full),
+        .winc(~pixel_fifo_full),
         .wdata(rendered_pixel),
-        .wfull(fifo_full),
+        .wfull(pixel_fifo_full),
         .awfull(), // Almost full. Not used.
 
         .rclk(hdmi_clk),
         .rrst_n(~wb.rst_i), // Not used.
         .rinc(1'b1),
         .rdata(hdmi_pixel),
-        .rempty(fifo_empty),
+        .rempty(pixel_fifo_empty),
         .arempty() // Almost empty. Not used.
     );
 
@@ -172,7 +196,7 @@ module vesp_ava_top (
         .clk_pixel(hdmi_clk),
         .clk_pixel_x5(hdmi_clk_x5),
         .clk_audio(audio_clk),
-        .reset(fifo_empty),
+        .reset(pixel_fifo_empty),
         .rgb(hdmi_pixel),
         .audio_sample_word(),
         .tmds(tmds),
