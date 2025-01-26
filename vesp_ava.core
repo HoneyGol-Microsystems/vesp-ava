@@ -1,0 +1,51 @@
+CAPI=2:
+name: hgm:vesp-ip:ava:1.0.0
+description: VESP-ava, audio-video adapter for VESP processor
+
+filesets:
+  # Common RTL for simulation and synthesis.
+  rtl:
+    files:
+      - rtl/ava_pkg.sv
+      - rtl/ava_controller.sv
+      - rtl/ava_direct_mode.sv
+      - rtl/ava_sdpbram.sv
+      - rtl/ava_sdpdram.sv
+      - rtl/ava_top.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::async_fifo:1.1.0-r1
+      - hdl-util:ip:hdmi:1.0.0
+      - hgm:vesp-ip:wb-modules:1.0.0
+
+  tb_rtl:
+    files:
+      - tb/simple.sv
+    file_type: systemVerilogSource
+    depend:
+      - hgm:vesp-ip:wb-modules:1.0.0
+
+
+targets:
+  default: &default
+    filesets:
+      - rtl
+    toplevel: vesp_ava
+
+  simple_tb:
+    <<: *default
+    description: Run simple TB.
+    default_tool: modelsim
+    filesets:
+      - rtl
+      - tb_rtl
+    toplevel: simple_tb
+    tools:
+      modelsim:
+        vsim_options:
+          # This allows to debug class variables. Not working at its own, "log" command either in GUI or
+          # in 'do' script needs to be provided!
+          - -classdebug
+          # This is needed to dump all variables.
+          - -voptargs=+acc=lprn
+          - -voptargs=-timescale=1ns/1ps
