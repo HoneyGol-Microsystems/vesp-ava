@@ -11,6 +11,7 @@ filesets:
       - rtl/ava_direct_mode.sv
       - rtl/ava_sdpbram.sv
       - rtl/ava_sdpdram.sv
+      - rtl/ava_wb.sv
       - rtl/ava_top.sv
     file_type: systemVerilogSource
     depend:
