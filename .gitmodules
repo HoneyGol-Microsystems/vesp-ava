@@ -1,0 +1,6 @@
+[submodule "vendor/hdmi"]
+	path = vendor/hdmi
+	url = https://github.com/HoneyGol-Microsystems/hdmi.git
+[submodule "vendor/vga-text-mode"]
+	path = vendor/vga-text-mode
+	url = https://github.com/HoneyGol-Microsystems/vga-text-mode.git
