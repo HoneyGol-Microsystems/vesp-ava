@@ -14,9 +14,6 @@ module vesp_ava_top (
 
     import ava_pkg::*;
 
-    // =================================
-    // System clock domain.
-    // =================================
     // Controller signals
     coords_t coords;
     logic    vblank;
@@ -55,6 +52,14 @@ module vesp_ava_top (
     logic [PRAM_ADDR_WIDTH-1:0] pram_a2;
     logic [31:0]                pram_do2;
 
+    // HDMI signals
+    logic [9:0]                 hdmi_cx;
+    logic [9:0]                 hdmi_cy;
+    logic                       hdmi_in_frame;
+
+    // =================================
+    // System clock domain.
+    // =================================
     always_comb begin : vram_addr_mux_proc
         unique case (vga_mode)
             VGA_TEXT_MODE:   vram_a2 = vga_text_vram_addr;
@@ -158,7 +163,7 @@ module vesp_ava_top (
         unique case (vga_mode)
             VGA_TEXT_MODE:   rendered_pixel = vga_text_pixel;
             VGA_DIRECT_MODE: rendered_pixel = vga_direct_pixel;
-        endcase        
+        endcase
     end
 
 
@@ -176,11 +181,15 @@ module vesp_ava_top (
 
         .rclk(hdmi_clk),
         .rrst_n(~wb.rst_i), // Not used.
-        .rinc(1'b1),
+        .rinc((~pixel_fifo_empty) & hdmi_in_frame),
         .rdata(hdmi_pixel),
         .rempty(pixel_fifo_empty),
         .arempty() // Almost empty. Not used.
     );
+
+    always_comb begin : in_frame_detect
+        assign hdmi_in_frame = hdmi_cx <= COORD_X_MAX && hdmi_cy <= COORD_Y_MAX;
+    end
 
     hdmi #(
         .VIDEO_ID_CODE(1),                // 640x480@60
@@ -200,6 +209,8 @@ module vesp_ava_top (
         .rgb(hdmi_pixel),
         .audio_sample_word(),
         .tmds(tmds),
-        .tmds_clock(tdms_clock)
+        .tmds_clock(tdms_clock),
+        .cx(hdmi_cx),
+        .cy(hdmi_cy)
     );
 endmodule
