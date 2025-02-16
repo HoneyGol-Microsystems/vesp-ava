@@ -55,6 +55,7 @@ module vesp_ava_top (
     logic [9:0]                 hdmi_cx;
     logic [9:0]                 hdmi_cy;
     logic                       hdmi_in_frame;
+    logic                       hdmi_reset;
 
     // =================================
     // System clock domain.
