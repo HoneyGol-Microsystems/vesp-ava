@@ -1,27 +1,24 @@
 import ava_pkg::*;
 
 module ava_direct_mode (
-    input  logic        clk,
-    input  logic        reset,
+    input  logic                        clk,
+    input  logic                        reset,
     
-    input  coords_t     coords,
+    input  logic [VRAM_ADDR_WIDTH-1:0]  linear_coords,
 
-    input  logic [31:0] palette_d,
-    output logic [5:0]  palette_a,
+    input  logic [31:0]                 palette_d,
+    output logic [PRAM_ADDR_WIDTH-1:0]  palette_a,
 
-    output logic [16:0]  vram_a,
-    input  logic [31:0]  vram_d,
+    output logic [VRAM_ADDR_WIDTH-1:0]  vram_a,
+    input  logic [31:0]                 vram_d,
 
-    output logic [23:0] pixel_out
+    output logic [23:0]                 pixel_out
 );
-
-    // This will hopefully be synthesized to use FPGA's built-in DSP blocks.
-    // Memory has a latency of 1 => sending "next" address (+ 1).
-    assign vram_a = coords.x + (coords.x * coords.y) + 1;
+    assign vram_a = linear_coords >> 2; // Each word contains 4 pixels.
 
     // VRAM value is just an index to the palette RAM, which contains
     // resulting 24-bit color.
-    assign palette_a = vram_d;
+    assign palette_a = vram_d[linear_coords[1:0]]; // Pixel is represented by a single byte in the word.
     assign pixel_out = palette_d;
     
 endmodule

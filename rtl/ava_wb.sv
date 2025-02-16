@@ -1,5 +1,7 @@
+import ava_pkg::*;
+
 module ava_wb (
-    wishbone_p_if wb,
+    wishbone_p_if.slave                 wb,
 
     output  logic [VRAM_ADDR_WIDTH-1:0] vram_a,
     output  logic [31:0]                vram_di,
@@ -94,18 +96,18 @@ module ava_wb (
     end
 
     always_comb begin : memory_control
-        vram_a  = wb.adr;
+        vram_a  = wb.adr[31:2]; // Wishbone address is by bytes, whereas memory is addressed by words.
         vram_di = wb.dat_i;
-        vram_en = wb.sel & {4{vram_sel}};
-        vram_we = vram_sel & write;
+        vram_en = vram_sel;
+        vram_we = {4{vram_en}} & {4{write}} & wb.sel;
 
-        pram_a  = wb.adr;
+        pram_a  = wb.adr[31:2]; // Wishbone address is by bytes, whereas memory is addressed by words.
         pram_di = wb.dat_i;
-        pram_en = wb.sel & {4{pram_sel}};
-        pram_we = pram_sel & write;
+        pram_en = pram_sel;
+        pram_we = {4{pram_en}} & {4{write}} & wb.sel;
     end
 
-    always_ff @( posedge clk ) begin : register_addr_ff // Store address to simulate one clock cycle latency.
+    always_ff @( posedge wb.clk_i ) begin : register_addr_ff // Store address to simulate one clock cycle latency.
         reg_offset <= wb.adr[3:2];
     end
 
@@ -129,5 +131,5 @@ module ava_wb (
 
     assign vblank_irq    = regs.interrupts.vblank_irq_pending;
     assign pcm_empty_irq = regs.interrupts.pcm_empty_irq_pending;
-    
+    assign vga_mode      = regs.video_setup.mode;
 endmodule

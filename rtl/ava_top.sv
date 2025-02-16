@@ -15,7 +15,7 @@ module vesp_ava_top (
     import ava_pkg::*;
 
     // Controller signals
-    coords_t coords;
+    logic [VRAM_ADDR_WIDTH-1:0] linear_coords;
     logic    vblank;
     logic    pcm_empty;
 
@@ -30,20 +30,19 @@ module vesp_ava_top (
     logic [23:0] vga_direct_pixel;
 
     // VRAM connections
-    logic [31:0]                vram_a1;
+    logic [VRAM_ADDR_WIDTH-1:0] vram_a1;
     logic [31:0]                vram_do1;
     logic [31:0]                vram_di1;
     logic [3:0]                 vram_we1;
     logic                       vram_en1;
 
     logic [31:0]                vram_do2;
-    logic                       vram_en2;
     logic [VRAM_ADDR_WIDTH-1:0] vram_a2;
     logic [VRAM_ADDR_WIDTH-1:0] vga_text_vram_addr;
     logic [VRAM_ADDR_WIDTH-1:0] vga_direct_vram_addr;
 
     // Palette RAM conections
-    logic [31:0]                pram_a1;
+    logic [PRAM_ADDR_WIDTH-1:0] pram_a1;
     logic [31:0]                pram_do1;
     logic [31:0]                pram_di1;
     logic [3:0]                 pram_we1;
@@ -72,13 +71,13 @@ module vesp_ava_top (
         .reset(wb.rst_i),
 
         .pixel_fifo_full(pixel_fifo_full),
-        .coords(coords),
+        .coords(),
+        .linear_coords(linear_coords),
         .vblank(vblank)
     );
 
     ava_wb wishbone_controller (
-        .clk(wb.clk_i),
-        .reset(wb.rst_i),
+        .wb(wb),
 
         .vram_a(vram_a1),
         .vram_di(vram_di1),
@@ -100,7 +99,7 @@ module vesp_ava_top (
     );
 
     ava_sdpbram #(
-        .WORD_COUNT(76800),
+        .WORD_COUNT(VRAM_WORD_COUNT),
         .WORD_WIDTH(32),
         .GRANULARITY(8)
     ) vram (
@@ -118,7 +117,7 @@ module vesp_ava_top (
     );
 
     ava_sdpdram #(
-        .WORD_COUNT(256), // 256 24-bit colors (top 8 bit reserved)
+        .WORD_COUNT(PRAM_WORD_COUNT), // 256 24-bit colors (top 8 bit reserved)
         .WORD_WIDTH(32),
         .GRANULARITY(8)
     ) pram (
@@ -139,7 +138,7 @@ module vesp_ava_top (
         .clk(),
         .reset(),
 
-        .coords(coords),
+        .linear_coords(linear_coords),
         
         .palette_a(pram_a2),
         .palette_d(pram_do2),
@@ -166,6 +165,16 @@ module vesp_ava_top (
         endcase
     end
 
+    generic_synchronizer #(
+        .LEN(1)
+    ) wb_to_hdmi_reset_sync(
+        .clk(hdmi_clk),
+        .en(1'b1),
+        .data_in(wb.rst_i),
+        .data_out(hdmi_reset),
+        .rise(),
+        .fall()
+    );
 
     async_fifo #(
         .DSIZE(24),
@@ -180,7 +189,7 @@ module vesp_ava_top (
         .awfull(), // Almost full. Not used.
 
         .rclk(hdmi_clk),
-        .rrst_n(~wb.rst_i), // Not used.
+        .rrst_n(~hdmi_reset), // Not used.
         .rinc((~pixel_fifo_empty) & hdmi_in_frame),
         .rdata(hdmi_pixel),
         .rempty(pixel_fifo_empty),
@@ -188,7 +197,7 @@ module vesp_ava_top (
     );
 
     always_comb begin : in_frame_detect
-        assign hdmi_in_frame = hdmi_cx <= COORD_X_MAX && hdmi_cy <= COORD_Y_MAX;
+        hdmi_in_frame = hdmi_cx <= COORD_X_MAX && hdmi_cy <= COORD_Y_MAX;
     end
 
     hdmi #(
@@ -209,7 +218,7 @@ module vesp_ava_top (
         .rgb(hdmi_pixel),
         .audio_sample_word(),
         .tmds(tmds),
-        .tmds_clock(tdms_clock),
+        .tmds_clock(tmds_clock),
         .cx(hdmi_cx),
         .cy(hdmi_cy)
     );
