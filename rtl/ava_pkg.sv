@@ -4,6 +4,7 @@ package ava_pkg;
     localparam Y_RES       = 480;
     localparam COORD_X_MAX = X_RES - 1;
     localparam COORD_Y_MAX = Y_RES - 1;
+    localparam LINEAR_COORDS_BITS = $clog2(X_RES*Y_RES-1);
 
     typedef struct packed {
         logic [9:0] x;

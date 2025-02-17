@@ -15,7 +15,7 @@ module vesp_ava_top (
     import ava_pkg::*;
 
     // Controller signals
-    logic [VRAM_ADDR_WIDTH-1:0] linear_coords;
+    logic [LINEAR_COORDS_BITS-1:0] linear_coords;
     logic    vblank;
     logic    pcm_empty;
 
@@ -24,8 +24,8 @@ module vesp_ava_top (
     logic fifo_wr;
     logic [23:0] rendered_pixel;
 
-    logic fifo_reset;
-    logic fifo_rst_busy;
+    logic fifo_wr_rst_busy;
+    logic fifo_rd_rst_busy;
 
     // VGA modules outputs
     vga_mode_t   vga_mode;
@@ -73,7 +73,7 @@ module vesp_ava_top (
         .clk(wb.clk_i),
         .reset(wb.rst_i),
 
-        .pixel_fifo_full(pixel_fifo_full),
+        .fifo_busy(pixel_fifo_full | fifo_wr_rst_busy),
         .coords(),
         .linear_coords(linear_coords),
         .vblank(vblank)
@@ -116,6 +116,7 @@ module vesp_ava_top (
         
         .a2(vram_a2),
         .do2(vram_do2),
+        // .en2(1'b1)
         .en2(~pixel_fifo_full)
     );
 
@@ -138,8 +139,9 @@ module vesp_ava_top (
     );
 
     ava_direct_mode direct_mode (
-        .clk(),
-        .reset(),
+        .clk(wb.clk_i),
+        .reset(wb.rst_i),
+        .next_pixel(~pixel_fifo_full),
 
         .linear_coords(linear_coords),
         
@@ -167,22 +169,6 @@ module vesp_ava_top (
             VGA_DIRECT_MODE: rendered_pixel = vga_direct_pixel;
         endcase
     end
-
-    // xpm_cdc_sync_rst: Synchronous Reset Synchronizer
-    // Xilinx Parameterized Macro, version 2024.2
-    xpm_cdc_sync_rst #(
-        .DEST_SYNC_FF(4),   // DECIMAL; range: 2-10
-        .INIT(0),           // DECIMAL; 0=initialize synchronization registers to 0, 1=initialize synchronization
-                            // registers to 1
-        .INIT_SYNC_FF(1),   // DECIMAL; 0=disable simulation init values, 1=enable simulation init values
-        .SIM_ASSERT_CHK(1)  // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
-    )
-    xpm_cdc_sync_rst_inst (
-        .dest_rst(fifo_reset),
-        .dest_clk(hdmi_clk),
-        .src_rst(wb.rst_i)
-    );
-    // End of xpm_cdc_sync_rst_inst instantiation
 
     // xpm_fifo_async: Asynchronous FIFO
     // Xilinx Parameterized Macro, version 2024.2
@@ -217,21 +203,21 @@ module vesp_ava_top (
     .prog_empty(),
     .prog_full(),
     .rd_data_count(),
-    .rd_rst_busy(),
+    .rd_rst_busy(fifo_rd_rst_busy),
     .sbiterr(),
     .underflow(),
     .wr_ack(),
     .wr_data_count(),
-    .wr_rst_busy(fifo_rst_busy),
+    .wr_rst_busy(fifo_wr_rst_busy),
     .din(rendered_pixel),
     .injectdbiterr(),
     .injectsbiterr(),
     .rd_clk(hdmi_clk),
-    .rd_en(~pixel_fifo_empty & hdmi_in_frame),
-    .rst(fifo_reset & ~fifo_rst_busy),
+    .rd_en(~pixel_fifo_empty & hdmi_in_frame & ~fifo_rd_rst_busy),
+    .rst(wb.rst_i),
     .sleep(1'b0),
     .wr_clk(wb.clk_i),
-    .wr_en(~pixel_fifo_full)
+    .wr_en(~pixel_fifo_full & ~fifo_wr_rst_busy)
     );
     // End of xpm_fifo_async_inst instantiation
 
