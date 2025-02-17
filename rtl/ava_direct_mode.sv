@@ -17,9 +17,8 @@ module ava_direct_mode (
 );
     logic [1:0] pixel_offset;
 
-    // Because the linear_coords is one coord ahead (due to latency introduced by block RAM in VRAM),
-    // we need to store the current core, as we will need to compute correct offset in the 
-    // word loaded from VRAM (because each pixel is represented by a byte).
+    // Because there is a one-cycle latency in VRAM (BRAM implementation), we need to store a part
+    // of the coords that is used to index in the loaded word.
     always_ff @( posedge clk ) begin : pixel_offset_ff_proc
         if (reset) begin
             pixel_offset <= 2'b0;

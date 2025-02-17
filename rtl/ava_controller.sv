@@ -32,7 +32,7 @@ module ava_controller (
 
     always_ff @( posedge clk ) begin : linear_coord_counter_proc
         if (reset) begin
-            linear_coords <= 'h1; // Because the VRAM has a latency of 1, a headstart is needed.
+            linear_coords <= 'h0;
         end else if (fifo_busy) begin
             // Wait if fifo is busy.
         end else if (linear_coords == (X_RES * Y_RES) - 1) begin
