@@ -24,6 +24,9 @@ module vesp_ava_top (
     logic fifo_wr;
     logic [23:0] rendered_pixel;
 
+    logic fifo_reset;
+    logic fifo_rst_busy;
+
     // VGA modules outputs
     vga_mode_t   vga_mode;
     logic [23:0] vga_text_pixel;
@@ -55,7 +58,6 @@ module vesp_ava_top (
     logic [9:0]                 hdmi_cx;
     logic [9:0]                 hdmi_cy;
     logic                       hdmi_in_frame;
-    logic                       hdmi_reset;
 
     // =================================
     // System clock domain.
@@ -166,36 +168,72 @@ module vesp_ava_top (
         endcase
     end
 
-    generic_synchronizer #(
-        .LEN(1)
-    ) wb_to_hdmi_reset_sync(
-        .clk(hdmi_clk),
-        .en(1'b1),
-        .data_in(wb.rst_i),
-        .data_out(hdmi_reset),
-        .rise(),
-        .fall()
+    // xpm_cdc_sync_rst: Synchronous Reset Synchronizer
+    // Xilinx Parameterized Macro, version 2024.2
+    xpm_cdc_sync_rst #(
+        .DEST_SYNC_FF(4),   // DECIMAL; range: 2-10
+        .INIT(0),           // DECIMAL; 0=initialize synchronization registers to 0, 1=initialize synchronization
+                            // registers to 1
+        .INIT_SYNC_FF(1),   // DECIMAL; 0=disable simulation init values, 1=enable simulation init values
+        .SIM_ASSERT_CHK(1)  // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
+    )
+    xpm_cdc_sync_rst_inst (
+        .dest_rst(fifo_reset),
+        .dest_clk(hdmi_clk),
+        .src_rst(wb.rst_i)
     );
+    // End of xpm_cdc_sync_rst_inst instantiation
 
-    async_fifo #(
-        .DSIZE(24),
-        .ASIZE(2),
-        .FALLTHROUGH("TRUE")
-    ) pixel_fifo(
-        .wclk(wb.clk_i),
-        .wrst_n(~wb.rst_i),
-        .winc(~pixel_fifo_full),
-        .wdata(rendered_pixel),
-        .wfull(pixel_fifo_full),
-        .awfull(), // Almost full. Not used.
-
-        .rclk(hdmi_clk),
-        .rrst_n(~hdmi_reset), // Not used.
-        .rinc((~pixel_fifo_empty) & hdmi_in_frame),
-        .rdata(hdmi_pixel),
-        .rempty(pixel_fifo_empty),
-        .arempty() // Almost empty. Not used.
+    // xpm_fifo_async: Asynchronous FIFO
+    // Xilinx Parameterized Macro, version 2024.2
+    xpm_fifo_async #(
+        .CASCADE_HEIGHT(0),            // DECIMAL
+        .CDC_SYNC_STAGES(2),           // DECIMAL
+        .DOUT_RESET_VALUE("0"),        // String
+        .ECC_MODE("no_ecc"),           // String
+        // .EN_SIM_ASSERT_ERR("warning"), // String
+        .FIFO_MEMORY_TYPE("auto"),     // String
+        .FIFO_READ_LATENCY(0),         // DECIMAL
+        .FIFO_WRITE_DEPTH(16),         // DECIMAL
+        .FULL_RESET_VALUE(0),          // DECIMAL
+        .RD_DATA_COUNT_WIDTH(1),       // DECIMAL
+        .READ_DATA_WIDTH(24),          // DECIMAL
+        .READ_MODE("fwft"),            // String
+        .RELATED_CLOCKS(0),            // DECIMAL
+        .SIM_ASSERT_CHK(1),            // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
+        .USE_ADV_FEATURES("0000"),     // String
+        .WAKEUP_TIME(0),               // DECIMAL
+        .WRITE_DATA_WIDTH(24),         // DECIMAL
+        .WR_DATA_COUNT_WIDTH(1)        // DECIMAL
+    ) pixel_fifo (
+    .almost_empty(),
+    .almost_full(),
+    .data_valid(),
+    .dbiterr(),
+    .dout(hdmi_pixel),
+    .empty(pixel_fifo_empty),
+    .full(pixel_fifo_full),
+    .overflow(),
+    .prog_empty(),
+    .prog_full(),
+    .rd_data_count(),
+    .rd_rst_busy(),
+    .sbiterr(),
+    .underflow(),
+    .wr_ack(),
+    .wr_data_count(),
+    .wr_rst_busy(fifo_rst_busy),
+    .din(rendered_pixel),
+    .injectdbiterr(),
+    .injectsbiterr(),
+    .rd_clk(hdmi_clk),
+    .rd_en(~pixel_fifo_empty & hdmi_in_frame),
+    .rst(fifo_reset & ~fifo_rst_busy),
+    .sleep(1'b0),
+    .wr_clk(wb.clk_i),
+    .wr_en(~pixel_fifo_full)
     );
+    // End of xpm_fifo_async_inst instantiation
 
     always_comb begin : in_frame_detect
         hdmi_in_frame = hdmi_cx <= COORD_X_MAX && hdmi_cy <= COORD_Y_MAX;
