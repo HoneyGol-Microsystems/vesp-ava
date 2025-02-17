@@ -15,7 +15,6 @@ filesets:
       - rtl/ava_top.sv
     file_type: systemVerilogSource
     depend:
-      - ::async_fifo:1.1.0-r1
       - hdl-util:ip:hdmi:1.0.0
       - hgm:vesp-ip:wb-modules:1.0.0
 
