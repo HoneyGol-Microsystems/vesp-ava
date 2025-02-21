@@ -32,4 +32,11 @@ package ava_pkg;
         vga_mode_t         mode;
     } ava_reg_video_setup_t;
 
+    typedef struct packed {
+        logic [28:0] reserved;
+        logic        fifo_full;
+        logic        fifo_empty;
+        logic        fifo_busy;
+    } pcm_status_t;
+
 endpackage

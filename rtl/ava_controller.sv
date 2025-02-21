@@ -8,7 +8,7 @@ module ava_controller (
     input   logic                               fifo_busy,
     output  coords_t                            coords,
     output  logic    [LINEAR_COORDS_BITS-1:0]   linear_coords,
-    output  logic                               vblank
+    output  logic                               vblank_start
 );
 
     always_ff @( posedge clk ) begin : coord_counter_proc
@@ -42,6 +42,6 @@ module ava_controller (
         end
     end
     
-    assign vblank = coords.x == COORD_X_MAX && coords.y == COORD_Y_MAX;
+    assign vblank_start = coords.x == COORD_X_MAX && coords.y == COORD_Y_MAX;
 
 endmodule

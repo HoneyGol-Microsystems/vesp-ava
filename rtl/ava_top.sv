@@ -16,16 +16,24 @@ module vesp_ava_top (
 
     // Controller signals
     logic [LINEAR_COORDS_BITS-1:0] linear_coords;
-    logic    vblank;
-    logic    pcm_empty;
+    logic    vblank_start;
 
-    // FIFO connections
+    // HDMI FIFO connections
     logic pixel_fifo_full;
     logic fifo_wr;
     logic [23:0] rendered_pixel;
 
     logic fifo_wr_rst_busy;
     logic fifo_rd_rst_busy;
+    logic pixel_fifo_empty;
+
+    // PCM FIFO connections
+    logic [31:0] audio_sample_word_packed;
+    logic [15:0] audio_sample_word [1:0];
+    logic        pcm_fifo_empty;
+    logic        pcm_fifo_full;
+    logic        pcm_fifo_rd_rst_busy;
+    logic        pcm_fifo_wr_rst_busy;
 
     // VGA modules outputs
     vga_mode_t   vga_mode;
@@ -54,10 +62,16 @@ module vesp_ava_top (
     logic [PRAM_ADDR_WIDTH-1:0] pram_a2;
     logic [31:0]                pram_do2;
 
+    logic [31:0]                pcm_fifo_di;
+    logic                       pcm_fifo_we;
+
     // HDMI signals
     logic [9:0]                 hdmi_cx;
     logic [9:0]                 hdmi_cy;
     logic                       hdmi_in_frame;
+    logic                       fifo_rd;
+
+    logic [23:0]                hdmi_pixel;
 
     // =================================
     // System clock domain.
@@ -76,7 +90,7 @@ module vesp_ava_top (
         .fifo_busy(pixel_fifo_full | fifo_wr_rst_busy),
         .coords(),
         .linear_coords(linear_coords),
-        .vblank(vblank)
+        .vblank_start(vblank_start)
     );
 
     ava_wb wishbone_controller (
@@ -93,9 +107,14 @@ module vesp_ava_top (
         .pram_en(pram_en1),
         .pram_we(pram_we1),
         .pram_do(pram_do1),
+
+        .pcm_fifo_di(pcm_fifo_di),
+        .pcm_fifo_we(pcm_fifo_we),
+        .pcm_fifo_empty(pcm_fifo_empty),
+        .pcm_fifo_full(pcm_fifo_full),
+        .pcm_busy(pcm_fifo_wr_rst_busy),
         
-        .vblank(vblank),
-        .pcm_empty(pcm_empty),
+        .vblank_start(vblank_start),
         .vga_mode(vga_mode),
         .vblank_irq(vblank_irq),
         .pcm_empty_irq(pcm_empty_irq)
@@ -155,14 +174,62 @@ module vesp_ava_top (
     );
 
     // =================================
+    // Audio clock domain.
+    // =================================
+    // xpm_fifo_async: Asynchronous FIFO
+    // Xilinx Parameterized Macro, version 2024.2
+    xpm_fifo_async #(
+        .CASCADE_HEIGHT(0),            // DECIMAL
+        .CDC_SYNC_STAGES(2),           // DECIMAL
+        .DOUT_RESET_VALUE("0"),        // String
+        .ECC_MODE("no_ecc"),           // String
+        // .EN_SIM_ASSERT_ERR("warning"), // String
+        .FIFO_MEMORY_TYPE("auto"),     // String
+        .FIFO_READ_LATENCY(0),         // DECIMAL
+        .FIFO_WRITE_DEPTH(512),        // DECIMAL
+        .FULL_RESET_VALUE(0),          // DECIMAL
+        .RD_DATA_COUNT_WIDTH(1),       // DECIMAL
+        .READ_DATA_WIDTH(32),          // DECIMAL
+        .READ_MODE("fwft"),            // String
+        .RELATED_CLOCKS(0),            // DECIMAL
+        .SIM_ASSERT_CHK(1),            // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
+        .USE_ADV_FEATURES("0000"),     // String
+        .WAKEUP_TIME(0),               // DECIMAL
+        .WRITE_DATA_WIDTH(32),         // DECIMAL
+        .WR_DATA_COUNT_WIDTH(1)        // DECIMAL
+    ) pcm_fifo (
+    .almost_empty(),
+    .almost_full(),
+    .data_valid(),
+    .dbiterr(),
+    .dout(audio_sample_word_packed),
+    .empty(pcm_fifo_empty),
+    .full(pcm_fifo_full),
+    .overflow(),
+    .prog_empty(),
+    .prog_full(),
+    .rd_data_count(),
+    .rd_rst_busy(pcm_fifo_rd_rst_busy),
+    .sbiterr(),
+    .underflow(),
+    .wr_ack(),
+    .wr_data_count(),
+    .wr_rst_busy(pcm_fifo_wr_rst_busy),
+    .din(pcm_fifo_di),
+    .injectdbiterr(),
+    .injectsbiterr(),
+    .rd_clk(audio_clk),
+    .rd_en(~pcm_fifo_empty & ~pcm_fifo_rd_rst_busy),
+    .rst(wb.rst_i),
+    .sleep(1'b0),
+    .wr_clk(wb.clk_i),
+    .wr_en(~pcm_fifo_full & ~pcm_fifo_wr_rst_busy & pcm_fifo_we)
+    );
+    // End of xpm_fifo_async_inst instantiation
+
+    // =================================
     // HDMI clock domain.
     // =================================
-    logic pixel_fifo_empty;
-    logic fifo_rd;
-
-    logic [23:0] hdmi_pixel;
-
-
     always_comb begin : pixel_mux_proc
         unique case (vga_mode)
             VGA_TEXT_MODE:   rendered_pixel = vga_text_pixel;
@@ -230,7 +297,7 @@ module vesp_ava_top (
         .IT_CONTENT(1'b1),                // Do not filter
         .DVI_OUTPUT(1'b0),                // Use full-fledged HDMI
         .VIDEO_REFRESH_RATE(60),
-        .AUDIO_RATE(44100),
+        .AUDIO_RATE(48000),
         .AUDIO_BIT_WIDTH(16),
         .VENDOR_NAME({"HGM",40'b0}),
         .PRODUCT_DESCRIPTION({"VESP Megatron", 24'b0}),
@@ -241,10 +308,15 @@ module vesp_ava_top (
         .clk_audio(audio_clk),
         .reset(pixel_fifo_empty),
         .rgb(hdmi_pixel),
-        .audio_sample_word(),
+        .audio_sample_word(audio_sample_word),
         .tmds(tmds),
         .tmds_clock(tmds_clock),
         .cx(hdmi_cx),
         .cy(hdmi_cy)
     );
+
+    always_comb begin : audio_word_packing
+        audio_sample_word[0] = audio_sample_word_packed[15:0];
+        audio_sample_word[1] = audio_sample_word_packed[31:16];
+    end
 endmodule
